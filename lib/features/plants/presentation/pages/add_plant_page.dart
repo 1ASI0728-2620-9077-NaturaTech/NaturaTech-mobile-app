@@ -1,0 +1,281 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../domain/models/plant.dart';
+import '../blocs/plant_bloc.dart';
+import '../blocs/plant_event.dart';
+import '../blocs/plant_state.dart';
+import '../widgets/thresholds_editor.dart';
+
+class AddPlantPage extends StatefulWidget {
+  final int profileId;
+  const AddPlantPage({required this.profileId, super.key});
+
+  @override
+  State<AddPlantPage> createState() => _AddPlantPageState();
+}
+
+class _AddPlantPageState extends State<AddPlantPage> {
+  final _nameController = TextEditingController();
+  final _speciesController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _imageUrlController = TextEditingController();
+
+  String _selectedHumidity = 'MEDIA';
+  DateTime? _acquisitionDate;
+  bool _isSaving = false;
+  PlantThresholds _thresholds = PlantThresholds.defaults;
+
+  String _formatDate(DateTime date) {
+    return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+  }
+
+  int _wateringIntervalDays() {
+    switch (_selectedHumidity) {
+      case 'ALTA':
+        return 2;
+      case 'MEDIA':
+        return 4;
+      case 'BAJA':
+        return 7;
+      default:
+        return 4;
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _acquisitionDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() => _acquisitionDate = picked);
+    }
+  }
+
+  void _savePlant() {
+    if (_nameController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa el nombre de la planta')),
+      );
+      return;
+    }
+
+    if (_speciesController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa la especie de la planta')),
+      );
+      return;
+    }
+
+    if (_acquisitionDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona la fecha de adquisicion')),
+      );
+      return;
+    }
+
+    final nextWatering =
+        _acquisitionDate!.add(Duration(days: _wateringIntervalDays()));
+
+    final newPlant = Plant(
+      id: 0,
+      name: _nameController.text.trim(),
+      species: _speciesController.text.trim(),
+      description: _descriptionController.text.trim(),
+      acquisitionDate: _formatDate(_acquisitionDate!),
+      humidity: _selectedHumidity,
+      nextWateringDate: _formatDate(nextWatering),
+      imageUrl: _imageUrlController.text.trim(),
+      notificationsEnabled: true,
+      profileId: widget.profileId,
+      temperatureThresholdMin: _thresholds.tempMin,
+      temperatureThresholdMax: _thresholds.tempMax,
+      humidityThresholdMin: _thresholds.humMin,
+      humidityThresholdMax: _thresholds.humMax,
+      lightThresholdMin: _thresholds.lightMin,
+    );
+
+    _isSaving = true;
+    context.read<PlantBloc>().add(CreatePlantEvent(newPlant));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Registrar Nueva Planta")),
+      body: BlocListener<PlantBloc, PlantState>(
+        listener: (context, state) {
+          if (state is PlantLoaded && _isSaving) {
+            _isSaving = false;
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Planta registrada correctamente'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            Navigator.pop(context, true);
+          }
+          if (state is PlantError && _isSaving) {
+            _isSaving = false;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: ${state.message}')),
+            );
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Nombre de tu planta",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _nameController,
+                  decoration: InputDecoration(
+                    labelText: "Ej. Mi Monstera",
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    prefixIcon: const Icon(Icons.eco),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text("Especie o tipo de planta",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _speciesController,
+                  decoration: InputDecoration(
+                    labelText: "Ej. Monstera Deliciosa",
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    prefixIcon: const Icon(Icons.nature),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text("Descripcion",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _descriptionController,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: "Descripcion de la planta",
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    prefixIcon: const Icon(Icons.description),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text("Fecha de adquisicion",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: _pickDate,
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      prefixIcon: const Icon(Icons.calendar_today),
+                    ),
+                    child: Text(
+                      _acquisitionDate != null
+                          ? _formatDate(_acquisitionDate!)
+                          : 'Selecciona una fecha',
+                      style: TextStyle(
+                        color: _acquisitionDate != null
+                            ? null
+                            : Colors.grey[600],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text("Nivel de humedad requerido",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedHumidity,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    prefixIcon: const Icon(Icons.water_drop),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'BAJA',
+                        child: Text('Baja - Riego cada 7 dias')),
+                    DropdownMenuItem(
+                        value: 'MEDIA',
+                        child: Text('Media - Riego cada 4 dias')),
+                    DropdownMenuItem(
+                        value: 'ALTA',
+                        child: Text('Alta - Riego cada 2 dias')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setState(() => _selectedHumidity = val);
+                  },
+                ),
+                const SizedBox(height: 24),
+                const Text("Foto de tu planta (URL)",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _imageUrlController,
+                  decoration: InputDecoration(
+                    labelText: "https://ejemplo.com/imagen.jpg",
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    prefixIcon: const Icon(Icons.image),
+                  ),
+                ),
+                const SizedBox(height: 28),
+                ThresholdsEditor(
+                  initial: _thresholds,
+                  onChanged: (t) => _thresholds = t,
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2E7D32),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: _savePlant,
+                    child: const Text("Registrar Planta",
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _speciesController.dispose();
+    _descriptionController.dispose();
+    _imageUrlController.dispose();
+    super.dispose();
+  }
+}

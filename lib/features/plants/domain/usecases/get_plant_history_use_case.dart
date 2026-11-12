@@ -1,0 +1,3 @@
+class GetPlantHistoryUseCase {
+  GetPlantHistoryUseCase();
+}
